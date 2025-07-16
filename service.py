@@ -1,8 +1,8 @@
-import os
-
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+import subprocess
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from dotenv import load_dotenv
+from cryptography.hazmat.backends import default_backend
 
 load_dotenv()
 
@@ -29,7 +29,7 @@ def get_public_pem_bytes(public_key):
 def mkdir(user: str):
     key_path = CURRENT_PATH + "/keys/" + user
     if not os.path.exists(key_path):
-        os.mkdir(key_path)
+        subprocess.run(["mkdir", "-p", key_path])
     return key_path
 
 def write_in_pem_file(user: str):
@@ -42,3 +42,33 @@ def write_in_pem_file(user: str):
         f.write(f"{str_private_key}")
     with open(f'{path}/{user}_public.pem', 'w') as f:
         f.write(f"{str_public_key}")
+
+def read_file(file_path: str, extension: str = ".txt", type_read: str = "r") -> str | bytes:
+    if not file_path.endswith(extension):
+        raise Exception(f"File {file_path} is not a {extension} file.")
+    with open(file_path, type_read) as f:
+        return f.read()
+
+def read_private_key_file(user: str):
+    key_path = CURRENT_PATH + "/keys/" + user
+    private_key = read_file(key_path + f"/{user}_private.pem", ".pem", type_read="rb")
+    return serialization.load_pem_private_key(private_key, backend=default_backend(), password=None)
+
+def get_hash_value(file_path: str) -> bytes:
+    file_content = read_file(file_path, type_read="rb")
+    hash_value = hashes.Hash(hashes.SHA256())
+    hash_value.update(file_content)
+    return hash_value.finalize()
+
+def sign_file(file_path: str, user: str):
+    private_key = read_private_key_file(user)
+    hash_value = get_hash_value(file_path)
+    signature = private_key.sign(hash_value,
+                                    padding=padding.PSS(
+                                        mgf=padding.MGF1(hashes.SHA256()),
+                                        salt_length=padding.PSS.MAX_LENGTH
+                                    ),
+                                    algorithm=hashes.SHA256()
+                                 )
+    print(signature)
+    return signature
