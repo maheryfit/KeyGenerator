@@ -1,4 +1,8 @@
+import datetime
+import json
 import subprocess
+from datetime import time
+
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from dotenv import load_dotenv
@@ -11,7 +15,7 @@ import os
 CURRENT_PATH = os.getcwd()
 EXPONENT = os.getenv('EXPONENT')
 KEY_SIZE = os.getenv('KEY_SIZE')
-
+SIGNATURE_SAVE_FILE = "signature_save_file.json"
 def generate_private_key():
     return rsa.generate_private_key(public_exponent=int(EXPONENT), key_size=int(KEY_SIZE))
 
@@ -26,8 +30,8 @@ def get_public_pem_bytes(public_key):
     pem_bytes = public_key.public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo)
     return pem_bytes.decode("utf-8")
 
-def mkdir(user: str):
-    key_path = CURRENT_PATH + "/keys/" + user
+def mkdir(user: str, parent_folder: str = "keys"):
+    key_path = CURRENT_PATH + f"/{parent_folder}/" + user
     if not os.path.exists(key_path):
         subprocess.run(["mkdir", "-p", key_path])
     return key_path
@@ -70,5 +74,31 @@ def sign_file(file_path: str, user: str):
                                     ),
                                     algorithm=hashes.SHA256()
                                  )
-    print(signature)
     return signature
+
+def write_signature_safeguard_file(signature: bytes, user):
+    signature_safeguard_file = CURRENT_PATH + "/" + SIGNATURE_SAVE_FILE
+    file_content = read_signature_safeguard_file(signature_safeguard_file)
+    new_signature_to_save = {"signature": str(signature), "user": user, "timestamp": str(datetime.datetime.now())}
+    file_content.append(new_signature_to_save)
+    with open(signature_safeguard_file, "w") as f:
+        json.dump(file_content, f, indent=4)
+
+def read_signature_safeguard_file(signature_safeguard_file: str):
+    try:
+        with open(signature_safeguard_file) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
+
+def store_signature_file(signature: bytes, file_path: str, user: str):
+    new_file_path = file_path.replace(".txt", ".sig")
+    folder_path = mkdir(user, "signatures")
+    with open(folder_path + "/" + new_file_path, "wb") as f:
+        f.write(signature)
+
+def process_sign_file(file_path: str, user: str):
+    signature = sign_file(file_path, user)
+    write_signature_safeguard_file(signature, user)
+    store_signature_file(signature, file_path, user)
+
