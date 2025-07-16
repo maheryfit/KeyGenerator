@@ -2,6 +2,7 @@ import datetime
 import json
 import subprocess
 from datetime import time
+from json import JSONDecodeError
 
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
@@ -15,7 +16,7 @@ import os
 CURRENT_PATH = os.getcwd()
 EXPONENT = os.getenv('EXPONENT')
 KEY_SIZE = os.getenv('KEY_SIZE')
-SIGNATURE_SAVE_FILE = "signature_save_file.json"
+METADATA_SIGNATURE = "metadata_signature"
 def generate_private_key():
     return rsa.generate_private_key(public_exponent=int(EXPONENT), key_size=int(KEY_SIZE))
 
@@ -76,20 +77,11 @@ def sign_file(file_path: str, user: str):
                                  )
     return signature
 
-def write_signature_safeguard_file(signature: bytes, user):
-    signature_safeguard_file = CURRENT_PATH + "/" + SIGNATURE_SAVE_FILE
-    file_content = read_signature_safeguard_file(signature_safeguard_file)
+def write_signature_safeguard_file(signature: bytes, user, file_path: str):
+    signature_safeguard_file = mkdir(user, parent_folder="metadata_signature")
     new_signature_to_save = {"signature": str(signature), "user": user, "timestamp": str(datetime.datetime.now())}
-    file_content.append(new_signature_to_save)
-    with open(signature_safeguard_file, "w") as f:
-        json.dump(file_content, f, indent=4)
-
-def read_signature_safeguard_file(signature_safeguard_file: str):
-    try:
-        with open(signature_safeguard_file) as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return []
+    with open(signature_safeguard_file + f"/{user}_{file_path}.json", "w+") as f:
+        json.dump(new_signature_to_save, f, indent=4)
 
 def store_signature_file(signature: bytes, file_path: str, user: str):
     new_file_path = file_path.replace(".txt", ".sig")
@@ -99,6 +91,6 @@ def store_signature_file(signature: bytes, file_path: str, user: str):
 
 def process_sign_file(file_path: str, user: str):
     signature = sign_file(file_path, user)
-    write_signature_safeguard_file(signature, user)
+    write_signature_safeguard_file(signature, user, file_path)
     store_signature_file(signature, file_path, user)
 
